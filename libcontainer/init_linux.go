@@ -2,7 +2,6 @@ package libcontainer
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -148,17 +147,14 @@ func StartInitialization() (retErr error) {
 	}()
 
 	// If init succeeds, it will not return, hence none of the defers will be called.
-	return containerInit(it, pipe, consoleSocket, fifofd, logPipeFd, mountFds)
+	return containerInit(it, &config, syncPipe, consoleSocket, pidfdSocket, fifoFile, logPipe)
 }
 
-func containerInit(t initType, pipe *os.File, consoleSocket *os.File, fifoFd, logFd int, mountFds []int) error {
-	var config *initConfig
-	if err := json.NewDecoder(pipe).Decode(&config); err != nil {
-		return err
-	}
+func containerInit(t initType, config *initConfig, pipe *syncSocket, consoleSocket, pidfdSocket, fifoFile, logPipe *os.File) error {
 	if err := populateProcessEnvironment(config.Env); err != nil {
 		return err
 	}
+
 	switch t {
 	case initSetns:
 		// mountFds must be nil in this case. We don't mount while doing runc exec.
@@ -170,7 +166,7 @@ func containerInit(t initType, pipe *os.File, consoleSocket *os.File, fifoFd, lo
 			pipe:          pipe,
 			consoleSocket: consoleSocket,
 			config:        config,
-			logFd:         logFd,
+			logPipe:       logPipe,
 		}
 		return i.Init()
 	case initStandard:
@@ -179,9 +175,8 @@ func containerInit(t initType, pipe *os.File, consoleSocket *os.File, fifoFd, lo
 			consoleSocket: consoleSocket,
 			parentPid:     unix.Getppid(),
 			config:        config,
-			fifoFd:        fifoFd,
-			logFd:         logFd,
-			mountFds:      mountFds,
+			fifoFile:      fifoFile,
+			logPipe:       logPipe,
 		}
 		return i.Init()
 	}

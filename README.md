@@ -65,14 +65,17 @@ e.g. to disable seccomp:
 make BUILDTAGS=""
 ```
 
-| Build Tag | Feature                            | Enabled by default | Dependency |
-|-----------|------------------------------------|--------------------|------------|
-| seccomp   | Syscall filtering                  | yes                | libseccomp |
+| Build Tag     | Feature                               | Enabled by Default | Dependencies        |
+|---------------|---------------------------------------|--------------------|---------------------|
+| `seccomp`     | Syscall filtering using `libseccomp`. | yes                | `libseccomp`        |
 
 The following build tags were used earlier, but are now obsoleted:
+ - **runc_nodmz** (since runc v1.2.1 runc dmz binary is dropped)
  - **nokmem** (since runc v1.0.0-rc94 kernel memory settings are ignored)
  - **apparmor** (since runc v1.0.0-rc93 the feature is always enabled)
  - **selinux**  (since runc v1.0.0-rc93 the feature is always enabled)
+
+ [contrib-memfd-bind]: /contrib/cmd/memfd-bind/README.md
 
 ### Running the test suite
 

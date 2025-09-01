@@ -1,3 +1,5 @@
+SHELL = /bin/bash
+
 CONTAINER_ENGINE := docker
 GO ?= go
 
@@ -10,6 +12,7 @@ GIT_BRANCH_CLEAN := $(shell echo $(GIT_BRANCH) | sed -e "s/[^[:alnum:]]/-/g")
 RUNC_IMAGE := runc_dev$(if $(GIT_BRANCH_CLEAN),:$(GIT_BRANCH_CLEAN))
 PROJECT := github.com/opencontainers/runc
 BUILDTAGS ?= seccomp urfave_cli_no_docs
+BUILDTAGS += $(EXTRA_BUILDTAGS)
 
 COMMIT ?= $(shell git describe --dirty --long --always)
 VERSION := $(shell cat ./VERSION)
@@ -57,18 +60,46 @@ endif
 
 .DEFAULT: runc
 
-runc:
+.PHONY: runc
+runc: runc-bin
+
+.PHONY: runc-bin
+runc-bin:
 	$(GO_BUILD) -o runc .
+	make verify-dmz-arch
 
-all: runc recvtty sd-helper seccompagent
+all: runc recvtty sd-helper seccompagent fs-idmap memfd-bind
 
-recvtty sd-helper seccompagent:
+recvtty sd-helper seccompagent fs-idmap memfd-bind:
 	$(GO_BUILD) -o contrib/cmd/$@/$@ ./contrib/cmd/$@
 
-static:
-	$(GO_BUILD_STATIC) -o runc .
+.PHONY: recvtty sd-helper seccompagent fs-idmap pidfd-kill remap-rootfs
+recvtty sd-helper seccompagent fs-idmap pidfd-kill remap-rootfs:
+	$(GO_BUILD) -o tests/cmd/$@/$@ ./tests/cmd/$@
 
-releaseall: RELEASE_ARGS := "-a arm64 -a armel -a armhf -a ppc64le -a riscv64 -a s390x"
+.PHONY: clean
+clean:
+	rm -f runc runc-*
+	rm -f contrib/cmd/memfd-bind/memfd-bind
+	rm -f tests/cmd/recvtty/recvtty
+	rm -f tests/cmd/sd-helper/sd-helper
+	rm -f tests/cmd/seccompagent/seccompagent
+	rm -f tests/cmd/fs-idmap/fs-idmap
+	rm -f tests/cmd/pidfd-kill/pidfd-kill
+	rm -f tests/cmd/remap-rootfs/remap-rootfs
+	sudo rm -rf release
+	rm -rf man/man8
+
+.PHONY: static
+static: static-bin
+
+.PHONY: static-bin
+static-bin:
+	$(GO_BUILD_STATIC) -o runc .
+	make verify-dmz-arch
+
+.PHONY: releaseall
+releaseall: RELEASE_ARGS := "-a 386 -a amd64 -a arm64 -a armel -a armhf -a ppc64le -a riscv64 -a s390x"
 releaseall: release
 
 release: runcimage
@@ -147,11 +178,13 @@ install-man: man
 	install -D -m 644 man/man8/*.8 $(DESTDIR)$(MANDIR)/man8
 
 clean:
-	rm -f runc runc-*
+	rm -f runc runc-* libcontainer/dmz/runc-dmz
+	rm -f contrib/cmd/fs-idmap/fs-idmap
 	rm -f contrib/cmd/recvtty/recvtty
 	rm -f contrib/cmd/sd-helper/sd-helper
 	rm -f contrib/cmd/seccompagent/seccompagent
-	rm -rf release
+	rm -f contrib/cmd/memfd-bind/memfd-bind
+	sudo rm -rf release
 	rm -rf man/man8
 
 cfmt: C_SRC=$(shell git ls-files '*.c' | grep -v '^vendor/')
@@ -188,6 +221,7 @@ verify-dependencies: vendor
 		|| (echo -e "git status:\n $$(git status -- go.mod go.sum vendor/)\nerror: vendor/, go.mod and/or go.sum not up to date. Run \"make vendor\" to update"; exit 1) \
 		&& echo "all vendor files are up to date."
 
+.PHONY: validate-keyring
 validate-keyring:
 	script/keyring_validate.sh
 
@@ -196,4 +230,4 @@ validate-keyring:
 	test localtest unittest localunittest integration localintegration \
 	rootlessintegration localrootlessintegration shell install install-bash \
 	install-man clean cfmt shfmt localshfmt shellcheck \
-	vendor verify-changelog verify-dependencies validate-keyring
+	vendor verify-changelog verify-dependencies verify-dmz-arch validate-keyring
